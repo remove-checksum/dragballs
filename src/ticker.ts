@@ -1,50 +1,52 @@
 type TickerConfig = {
-  fps: number;
-  update: (t: number, dt: number) => void;
-  render: (t: number, dt: number) => void;
+	fps: number;
+	update: (t: number, dt: number) => void;
+	render: (t: number, dt: number) => void;
 };
 
 export function makeTicker({ fps, update, render }: TickerConfig) {
-  let t = 0;
-  let dt = 1 / fps;
+	let t = 0.0;
+	let dt = 1000.0 / fps;
 
-  let now = performance.now();
-  let accum = 0;
+	let now = performance.now();
+	let accum = 0.0;
 
-  let loopRunning = false;
-  let rafHandle: number | undefined;
+	let loopRunning = false;
+	let rafHandle: number | undefined;
 
-  function Ticker(newNow: number) {
-    rafHandle = requestAnimationFrame(Ticker);
+	function Ticker(newNow: number) {
+		rafHandle = requestAnimationFrame(Ticker);
 
-    const frameTime = newNow - now;
-    now = newNow;
+		let frameTime = newNow - now;
+		now = newNow;
 
-    accum += frameTime;
-    let updatedThisFrame = false;
+		if (frameTime > 3000) frameTime = dt;
 
-    while (accum >= dt) {
-      update(t, dt);
-      accum -= dt;
-      t += dt;
-      updatedThisFrame = true;
-    }
-    if (updatedThisFrame) {
-      render(t, dt);
-    }
-  }
+		accum += frameTime;
+		let updatedThisFrame = false;
 
-  return {
-    isRunning: loopRunning,
-    start: () => {
-      loopRunning = true;
-      rafHandle = requestAnimationFrame(Ticker);
-    },
-    stop: () => {
-      loopRunning = false;
-      if (rafHandle) {
-        cancelAnimationFrame(rafHandle);
-      }
-    },
-  };
+		while (accum >= dt) {
+			update(t, dt);
+			accum -= dt;
+			t += dt;
+			updatedThisFrame = true;
+		}
+		if (updatedThisFrame) {
+			render(t, dt);
+		}
+	}
+
+	return {
+		isRunning: loopRunning,
+		start: () => {
+			loopRunning = true;
+			rafHandle = requestAnimationFrame(Ticker);
+		},
+		stop: () => {
+			loopRunning = false;
+			if (rafHandle) {
+				cancelAnimationFrame(rafHandle);
+			}
+		},
+	};
 }

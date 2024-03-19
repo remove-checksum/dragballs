@@ -1,122 +1,131 @@
-import React, { useEffect, useRef } from "react";
+import React, {
+	useEffect,
+	useId,
+	useLayoutEffect,
+	useReducer,
+	useRef,
+	useState,
+} from "react";
 import ReactDOM from "react-dom/client";
 import { v2, type Vector2d } from "./v2";
 import { makeTicker } from "./ticker";
-import { makeStruct } from "./helpers";
-// import App from './App.tsx'
-// import './index.css
-
-const CWidth = 1280;
-const CHeight = 729;
+import { GameLayout } from "./game-layout";
+import {
+	colours,
+	BOARD_SIZE,
+	bodies,
+	MovementSystem,
+	Bounds,
+	CollisionSystem,
+} from "./model";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <Main
-      onEnable={onEnable}
-      canvasDomSizing={v2(CWidth, CHeight)}
-      backdropColor={`#bada55`}
-    ></Main>
-  </React.StrictMode>
+	<React.StrictMode>
+		<Main></Main>
+	</React.StrictMode>
 );
 
-type VoidFn = (...args: any) => void;
-
-type GameProps = {
-  onEnable: VoidFn;
-  canvasDomSizing: Vector2d;
-  backdropColor: string;
-};
-
-function randi(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1) + min);
-}
-
-const colours = ["red", "orange", "tan", "rebeccapurple", "silver"];
-
-function initState(ballCount: number) {
-  const balls = makeStruct(
-    ["radius", "x", "y", "colourIndex"],
-    Uint32Array,
-    ballCount
-  );
-
-  let greatestRadius = 0;
-
-  for (let i = 0; i < ballCount; i++) {
-    const radius = randi(20, 40);
-    balls.radius[i] = radius;
-
-    if (radius > greatestRadius) {
-      greatestRadius = radius;
-    }
-  }
-
-  for (let i = 0; i < ballCount; i++) {
-    balls.x[i] = randi(greatestRadius, CWidth - greatestRadius);
-    balls.y[i] = randi(greatestRadius, CHeight - greatestRadius);
-    balls.colourIndex[i] = randi(0, colours.length);
-  }
-
-  return {
-    balls,
-    length: ballCount,
-  };
-}
-
 function onEnable(canvas: HTMLCanvasElement | null) {
-  if (!canvas) {
-    throw "no canvas"
-  }
-  const ctx = canvas.getContext("2d");
+	if (!canvas) {
+		throw "no canvas";
+	}
 
-  if (!ctx) {
-    throw "no context"
-  }
+	const ctx = canvas.getContext("2d");
 
-  const state = initState(12);
+	if (!ctx) {
+		throw "no context";
+	}
 
-  function update() {}
+	let state = bodies(40);
+	let gravity = v2(0, 0);
 
-  console.log(state.balls.x);
-  console.log(state.balls.y);
+	let selId: number | null = null;
 
-  function render() {
-    for (let index = 0; index < state.length; index++) {
-      const x = state.balls.x[index];
-      const y = state.balls.y[index];
-      const radius = state.balls.radius[index];
-      const colourIndex = state.balls.colourIndex[index];
+	const update = (t, dt) => {
+		MovementSystem(gravity, dt, state);
+		CollisionSystem(Bounds, state);
+	};
 
-      // ctx!.fillRect(actualx, actualy, radius, radius);
+	const render = () => {
+		ctx.clearRect(0, 0, BOARD_SIZE.x, BOARD_SIZE.y);
+		for (const { position, radius, colourIndex } of state) {
+			ctx.beginPath();
+			ctx.arc(position.x, position.y, radius, 0, 360);
+			ctx.fillStyle = colours[colourIndex];
+			ctx.fill();
+		}
+	};
 
-      ctx!.beginPath();
-      ctx!.arc(x, y, radius, 0, 100);
-      ctx!.fillStyle = colours[colourIndex];
-      ctx!.fill();
-    }
-  }
+	const ticker = makeTicker({
+		fps: 30,
+		update,
+		render,
+	});
 
-  const ticker = makeTicker({
-    fps: 60,
-    update,
-    render,
-  });
+	ticker.start();
 
-  render();
+	return ticker;
 }
 
+function diag(e, gameState, rect) {
+	const { x, y } = v2(e.clientX - rect.left, e.clientY - rect.top);
+	console.log({ x, y }, gameState);
+}
 
-function Main({ onEnable, canvasDomSizing, backdropColor }: GameProps) {
-  const canvasElement = useRef<HTMLCanvasElement | null>(null);
+function Main() {
+	const checkboxId = useId();
 
-  return (
-    <canvas
-      style={{
-        backgroundColor: backdropColor,
-      }}
-      width={canvasDomSizing.x}
-      height={canvasDomSizing.y}
-      ref={onEnable}
-    ></canvas>
-  );
+	return (
+		<GameLayout header={<h2>Bounce</h2>}>
+			<Billiard backdropColor="#2f6d56" canvasDomSizing={BOARD_SIZE} />
+		</GameLayout>
+	);
+}
+
+function Billiard({
+	backdropColor,
+	canvasDomSizing,
+}: {
+	backdropColor: string;
+	canvasDomSizing: Vector2d;
+}) {
+	// measure canvas
+	const canvasRef = useRef<HTMLCanvasElement | null>(null);
+	const [rect, setRect] = useState<DOMRect>();
+	useLayoutEffect(() => {
+		if (!canvasRef.current) return;
+
+		const rect = canvasRef.current!.getBoundingClientRect();
+		setRect(rect);
+	}, [setRect]);
+
+	const [absMousePosition, setAbsMousePosition] = useState<Vector2d>(v2(-100));
+
+	useEffect(() => {
+		onEnable(canvasRef.current);
+	}, []);
+
+	const handleMouseMove = (e) => {
+		if (!rect) return;
+		const mouseAbs = v2(e.clientX - rect.left, e.clientY - rect.top);
+
+		// setAbsMousePosition(mouseAbs);
+	};
+
+	console.log("react render");
+	return (
+		<>
+			<canvas
+				style={{
+					backgroundColor: backdropColor,
+					maxWidth: canvasDomSizing.x,
+					maxHeight: canvasDomSizing.y,
+				}}
+				onMouseMove={handleMouseMove}
+				width={canvasDomSizing.x}
+				height={canvasDomSizing.y}
+				ref={canvasRef}
+			></canvas>
+		</>
+	);
 }
