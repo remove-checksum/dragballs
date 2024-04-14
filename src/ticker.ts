@@ -1,7 +1,7 @@
-type TickerConfig = {
+export type TickerConfig = {
 	fps: number;
-	update: (t: number, dt: number) => void;
-	render: (t: number, dt: number) => void;
+	update: (t: number, dt: number, updateCount: number, renderCount: number) => void;
+	render: (t: number, dt: number, updateCount: number, renderCount: number) => void;
 };
 
 export function makeTicker({ fps, update, render }: TickerConfig) {
@@ -13,6 +13,9 @@ export function makeTicker({ fps, update, render }: TickerConfig) {
 
 	let loopRunning = false;
 	let rafHandle: number | undefined;
+
+	let updateCount = 0;
+	let renderCount = 0;
 
 	function Ticker(newNow: number) {
 		rafHandle = requestAnimationFrame(Ticker);
@@ -26,18 +29,28 @@ export function makeTicker({ fps, update, render }: TickerConfig) {
 		let updatedThisFrame = false;
 
 		while (accum >= dt) {
-			update(t, dt);
+			update(t, dt, updateCount, renderCount);
+			updateCount += 1;
 			accum -= dt;
 			t += dt;
 			updatedThisFrame = true;
 		}
 		if (updatedThisFrame) {
-			render(t, dt);
+			render(t, dt, updateCount, renderCount);
+			renderCount += 1;
 		}
 	}
 
 	return {
-		isRunning: loopRunning,
+		get updateCount() {
+			return updateCount;
+		},
+		get renderCount() {
+			return renderCount;
+		},
+		get isRunning() {
+			return loopRunning;
+		},
 		start: () => {
 			loopRunning = true;
 			rafHandle = requestAnimationFrame(Ticker);
