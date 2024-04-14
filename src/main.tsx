@@ -1,116 +1,91 @@
-import React, {
+import {
 	useEffect,
-	useId,
 	useLayoutEffect,
-	useReducer,
 	useRef,
 	useState,
+	StrictMode,
 } from "react";
 import ReactDOM from "react-dom/client";
-import { v2, type Vector2d } from "./v2";
-import { makeTicker } from "./ticker";
 import { GameLayout } from "./game-layout";
-import {
-	colours,
-	BOARD_SIZE,
-	bodies,
-	MovementSystem,
-	Bounds,
-	CollisionSystem,
-} from "./model";
+import { BOARD_SIZE, makeGameInstance } from "./model";
+import { V2, type PointLike } from "./math";
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-	<React.StrictMode>
-		<Main></Main>
-	</React.StrictMode>
+const root = document.getElementById("root");
+
+if (root === null) {
+	throw new Error("no root");
+}
+
+ReactDOM.createRoot(root).render(
+	<StrictMode>
+		<Main />
+	</StrictMode>,
 );
 
-function onEnable(canvas: HTMLCanvasElement | null) {
-	if (!canvas) {
-		throw "no canvas";
-	}
-
-	const ctx = canvas.getContext("2d");
-
-	if (!ctx) {
-		throw "no context";
-	}
-
-	let state = bodies(40);
-	let gravity = v2(0, 0);
-
-	let selId: number | null = null;
-
-	const update = (t, dt) => {
-		MovementSystem(gravity, dt, state);
-		CollisionSystem(Bounds, state);
-	};
-
-	const render = () => {
-		ctx.clearRect(0, 0, BOARD_SIZE.x, BOARD_SIZE.y);
-		for (const { position, radius, colourIndex } of state) {
-			ctx.beginPath();
-			ctx.arc(position.x, position.y, radius, 0, 360);
-			ctx.fillStyle = colours[colourIndex];
-			ctx.fill();
-		}
-	};
-
-	const ticker = makeTicker({
-		fps: 30,
-		update,
-		render,
-	});
-
-	ticker.start();
-
-	return ticker;
-}
-
-function diag(e, gameState, rect) {
-	const { x, y } = v2(e.clientX - rect.left, e.clientY - rect.top);
-	console.log({ x, y }, gameState);
-}
-
 function Main() {
-	const checkboxId = useId();
-
 	return (
 		<GameLayout header={<h2>Bounce</h2>}>
-			<Billiard backdropColor="#2f6d56" canvasDomSizing={BOARD_SIZE} />
+			<BilliardTable backdropColor="#2f6d56" canvasDomSizing={BOARD_SIZE} />
 		</GameLayout>
 	);
 }
 
-function Billiard({
+function BilliardTable({
 	backdropColor,
 	canvasDomSizing,
 }: {
 	backdropColor: string;
-	canvasDomSizing: Vector2d;
+	canvasDomSizing: PointLike;
 }) {
 	// measure canvas
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
 	const [rect, setRect] = useState<DOMRect>();
+
 	useLayoutEffect(() => {
-		if (!canvasRef.current) return;
-
-		const rect = canvasRef.current!.getBoundingClientRect();
-		setRect(rect);
-	}, [setRect]);
-
-	const [absMousePosition, setAbsMousePosition] = useState<Vector2d>(v2(-100));
-
-	useEffect(() => {
-		onEnable(canvasRef.current);
+		if (canvasRef.current) {
+			const rect = canvasRef.current.getBoundingClientRect();
+			setRect(rect);
+			console.log('settingrect')
+		}
 	}, []);
 
-	const handleMouseMove = (e) => {
-		if (!rect) return;
-		const mouseAbs = v2(e.clientX - rect.left, e.clientY - rect.top);
+	// const [absMousePosition, setAbsMousePosition] = useState(new V2(-100));
+	const hitTestCb = useRef<(hit: PointLike) => void>()
 
-		// setAbsMousePosition(mouseAbs);
-	};
+	useEffect(() => {
+		if (!canvasRef.current) {
+			console.error("no canvas element");
+			return
+		}
+
+		const { ticker, destroy, hitTest } = makeGameInstance(canvasRef.current);
+		hitTestCb.current = hitTest
+
+		const handleMouseMove = (e) => {
+			if (!rect) { return }
+
+			const mouseAbs = new V2(e.clientX - rect.left, e.clientY - rect.top)
+			console.log('hmousemouve', 'x: ', mouseAbs.x, 'y: ', mouseAbs.y)
+			hitTest(mouseAbs)
+		}
+
+		canvasRef.current.addEventListener("mousemove", handleMouseMove)
+		ticker.start()
+
+		return () => {
+			destroy()
+			canvasRef.current?.removeEventListener("mousemove", handleMouseMove)
+		}
+	}, [rect]);
+
+	// const handleMouseMove: React.MouseEventHandler<HTMLCanvasElement> = (e) => {
+	//   if (!rect) return;
+	//   const mouseAbs = new V2(e.clientX - rect.left, e.clientY - rect.top);
+	//   if (typeof hitTestCb.current === 'function') {
+	//     console.log(mouseAbs)
+	//     hitTestCb.current(mouseAbs)
+	//   }
+	// };
 
 	console.log("react render");
 	return (
@@ -121,11 +96,12 @@ function Billiard({
 					maxWidth: canvasDomSizing.x,
 					maxHeight: canvasDomSizing.y,
 				}}
-				onMouseMove={handleMouseMove}
+				// onMouseMove={handleMouseMove}
 				width={canvasDomSizing.x}
 				height={canvasDomSizing.y}
 				ref={canvasRef}
-			></canvas>
+			/>
 		</>
 	);
 }
+
