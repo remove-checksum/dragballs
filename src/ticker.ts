@@ -6,7 +6,7 @@ export type TickerConfig = {
 
 export function makeTicker({ fps, update, render }: TickerConfig) {
 	let t = 0.0;
-	let dt = 1000.0 / fps;
+	const dt = 1000.0 / fps;
 
 	let now = performance.now();
 	let accum = 0.0;

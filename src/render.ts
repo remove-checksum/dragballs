@@ -43,7 +43,8 @@ export function drawBall(
 	colour: string,
 ) {
 	ctx.beginPath();
-	ctx.arc(Math.round(ball.x), Math.round(ball.y), ball.radius, 0, 360);
+	ctx.arc(ball.x, ball.y, ball.radius, 0, 360);
 	ctx.fillStyle = colour;
 	ctx.fill();
+	ctx.restore();
 }

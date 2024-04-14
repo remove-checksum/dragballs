@@ -93,6 +93,10 @@ export class V2 implements PointLike {
 		return new V2(clamp(this.x, min, max), clamp(this.y, min, max));
 	}
 
+	toString() {
+		return `x: ${this.x} | y: ${this.y}`;
+	}
+
 	static distance(v1: PointLike, v2: PointLike) {
 		return Math.hypot(Math.abs(v2.x - v1.x) + Math.abs(v2.y - v1.y));
 	}

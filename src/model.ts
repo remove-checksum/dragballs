@@ -5,7 +5,6 @@ import {
 	vector2InBounds,
 	V2,
 	clamp,
-	circlesIntersect,
 	type PointLike,
 } from "./math";
 import { drawBall, makeGridImage } from "./render";
@@ -18,23 +17,26 @@ export const BOARD_SIZE = new V2(1024, 600),
 	BALL_RADIUS_MAX = 35,
 	BALL_DENSITY = 1.69,
 	BALL_V_INITIAL_MIN = 0.05,
-	BALL_V_INITIAL_MAX = 0.3,
+	BALL_V_INITIAL_MAX = 0.05,
 	BALL_V_TERMINAL = new V2(2, 2),
 	DECELERATION_FRACTION = 1.005;
 
-const GRAVITY = new V2(0, 0.0004);
+// const GRAVITY = new V2(0, 0.0004);
 export const BOUNDS_BOARD_LOWER = new V2(0, 0),
 	BOUNDS_BOARD_UPPER = BOARD_SIZE;
 
-export const COLOURS = [
-	"silver",
-	"aqua",
-	"orange",
-	"coral",
-	"tan",
-	"rebeccapurple",
-	"gold",
-];
+export const COLOUR_BALLS = [
+		"#001219",
+		"#005f73",
+		"#0a9396",
+		"#ee9b00",
+		"#ca6702",
+		"#bb3e03",
+		"#ae2012",
+		"#9b2226",
+	],
+	COLOUR_BACKGROUND = "#94d2bd",
+	COLOUR_TEXT = "#e9d8a6";
 
 export type Body = {
 	x: number;
@@ -89,87 +91,84 @@ export function makeBodies(size: number): Array<GameBall> {
 			vy: velocity.y,
 			radius,
 			mass: ballMass3d(radius),
-			colourIndex: randi(0, COLOURS.length),
+			colourIndex: randi(0, COLOUR_BALLS.length - 1),
 		});
 	}
 
 	return balls;
 }
 
-export function makeGameInstance(canvas: HTMLCanvasElement | null) {
-	if (!canvas) {
-		throw "no canvas";
-	}
-
-	const ctx = canvas.getContext("2d");
-
-	if (!ctx) {
-		throw "no context";
-	}
-
+export function makeGameInstance(ctx: CanvasRenderingContext2D) {
 	// sort balls by x component after creation
 	const state = makeBodies(BALLS_COUNT).sort(
 		(ballA, ballB) => ballA.x - ballB.x,
 	);
 
+	// game state
 	let pointerAt = V2.pointLike(-100);
+	let hitIndexLast = -1;
+	const ballsCollidingNarrowIndices = new Set();
+	const ballsIntersectingIndices = new Set();
 
 	// TODO: suspend until background created
 	let backgroundImage: CanvasImageSource | null = null;
-	makeGridImage(BOARD_SIZE, CELL_SIZE, "green").then(
+	makeGridImage(BOARD_SIZE, CELL_SIZE, COLOUR_BACKGROUND).then(
 		(image) => (backgroundImage = image),
 	);
 
 	const update: TickerConfig["update"] = (_t, dt, _updateCount) => {
+		hitIndexLast = -1;
+		ballsIntersectingIndices.clear();
+		ballsCollidingNarrowIndices.clear();
+
 		for (let i = 0; i < state.length; i++) {
-			let ballRef = state[i];
+			const ballRef = state[i];
 			const lowerX = BOUNDS_BOARD_LOWER.x + ballRef.radius;
 			const lowerY = BOUNDS_BOARD_LOWER.y + ballRef.radius;
 			const upperX = BOUNDS_BOARD_UPPER.x - ballRef.radius;
 			const upperY = BOUNDS_BOARD_UPPER.y - ballRef.radius;
 
-			let x1 = ballRef.x + ballRef.vx * dt;
-			let y1 = ballRef.y + ballRef.vy * dt;
+			const x1 = ballRef.x + ballRef.vx * dt;
+			const y1 = ballRef.y + ballRef.vy * dt;
 			let vx1 = ballRef.vx;
 			let vy1 = ballRef.vy;
 
-			let collidingWithIndices = [];
-			let colls = [];
-
-			for (let j = 0; j < state.length; j++) {
-				if (j === i) continue;
-
-				let coll = circlesIntersect(
-					ballRef,
-					ballRef.radius,
-					state[j],
-					state[j].radius,
-				);
-
-				if (coll) {
-					colls.push(coll);
-				}
-
-				let otherBallRef = state[j];
-				let ox1 = otherBallRef.x - otherBallRef.radius;
-				let ox2 = otherBallRef.x + otherBallRef.radius;
-				let tx1 = ballRef.x - ballRef.radius;
-				let tx2 = ballRef.x + ballRef.radius;
-
-				if (tx2 >= ox1 && ox2 >= tx1) {
-					collidingWithIndices.push(j);
-				}
-
-				for (let k = 0; k < collidingWithIndices.length; k++) {
-					let other = state[collidingWithIndices[k]];
-
-					let centerDistance = Math.hypot(
-						ballRef.x - other.x,
-						ballRef.y - other.y,
-					);
-					let radii = ballRef.radius + other.radius;
+			for (let hi = state.length - 1; hi >= 0; hi--) {
+				const testBall = state[hi];
+				if (V2.distance(pointerAt, testBall) < testBall.radius) {
+					hitIndexLast = hi;
 				}
 			}
+
+			// narrow phase
+			for (let j = 0; j < state.length; j++) {
+				if (j === i) continue;
+				const otherBallRef = state[j];
+
+				const ox1 = otherBallRef.x - otherBallRef.radius;
+				const ox2 = otherBallRef.x + otherBallRef.radius;
+				const tx1 = ballRef.x - ballRef.radius;
+				const tx2 = ballRef.x + ballRef.radius;
+
+				if (tx2 >= ox1 && ox2 >= tx1) {
+					ballsCollidingNarrowIndices.add(j);
+				}
+			}
+
+			// resolution
+			// for (let ballIndex of ballsCollidingNarrowIndices) {
+			// 	let otherBall = state[ballIndex as number];
+			// 	let centerDistance = Math.hypot(
+			// 		Math.abs(ballRef.x - otherBall.x),
+			// 		Math.abs(ballRef.y - otherBall.y),
+			// 	);
+			//
+			// 	let radii = ballRef.radius + otherBall.radius;
+			//
+			// 	if (centerDistance < radii) {
+			// 		ballsIntersectingIndices.add(ballIndex);
+			// 	}
+			// }
 
 			if (x1 < lowerX) {
 				ballRef.x = lowerX;
@@ -195,6 +194,9 @@ export function makeGameInstance(canvas: HTMLCanvasElement | null) {
 		}
 	};
 
+	// ctx.globalCompositeOperation = "hard-light";
+	// ctx.imageSmoothingEnabled = true;
+	// ctx.imageSmoothingQuality = "high";
 	const render: TickerConfig["render"] = (_t, _dt, _updateCount) => {
 		if (backgroundImage !== null) {
 			ctx.drawImage(backgroundImage, 0, 0, BOARD_SIZE.x, BOARD_SIZE.y);
@@ -203,14 +205,23 @@ export function makeGameInstance(canvas: HTMLCanvasElement | null) {
 			ctx.fillRect(0, 0, BOARD_SIZE.x, BOARD_SIZE.y);
 		}
 
-		let hitIndexLast = [...state]
-			.reverse()
-			.findIndex((b) => V2.distance(b, pointerAt) < b.radius);
-
 		for (let bi = 0; bi < state.length; bi++) {
 			const ball = state[bi];
-			const colour = bi === hitIndexLast ? "red" : COLOURS[ball.colourIndex];
+			const pointerHits = hitIndexLast >= 0 && bi === hitIndexLast;
+			const intersects = ballsIntersectingIndices.has(bi);
+			const colour =
+				pointerHits || intersects
+					? COLOUR_TEXT
+					: COLOUR_BALLS[ball.colourIndex];
+
 			drawBall(ctx, ball, colour);
+
+			if (import.meta.env.DEV) {
+				ctx.fillStyle = COLOUR_TEXT;
+				ctx.font = "bold 24px monospace";
+				ctx.fillText(bi.toString(), ball.x - 8, ball.y + 12);
+				ctx.restore();
+			}
 		}
 	};
 
@@ -230,7 +241,8 @@ export function makeGameInstance(canvas: HTMLCanvasElement | null) {
 	});
 
 	return {
-		ticker,
+		start: ticker.start,
+		stop: ticker.stop,
 		hitTest,
 		destroy,
 		renderOnce,
